@@ -1,4 +1,4 @@
-"""PolyEdge v1.0"""
+"""PolyEdge v1.1"""
 import os, json, asyncio, pathlib
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
