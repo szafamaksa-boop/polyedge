@@ -114,7 +114,9 @@ async def lifespan(a):
 
 app=FastAPI(title="PolyEdge",lifespan=lifespan)
 HP=pathlib.Path(__file__).parent/"templates"/"index.html"
-
+@app.get("/test123")
+async def test123():
+    return {"test": "works", "signals_count": len(signals_db), "shadow_count": len(shadow_db)}
 @app.get("/health")
 async def health():
     return{"status":"ok","last_update":last_update,"signals":len(signals_db),"shadow_bets":len(shadow_db)}
