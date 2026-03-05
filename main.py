@@ -54,7 +54,7 @@ PIT_RATE: float = 0.10
 
 BANKROLL_PLN: float = 2500.0           
 KELLY_FRACTION: float = 0.25           
-MIN_EV_PERCENT: float = 2.0            
+MIN_EV_PERCENT: float = -5.0            
 REFRESH_MINUTES: int = 10              
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s │ %(levelname)-7s │ %(message)s")
