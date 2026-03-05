@@ -170,8 +170,14 @@ async def run_pipeline():
             match = process.extractOne(p_str, bk_strings, scorer=fuzz.token_set_ratio, score_cutoff=35)
             
             if match:
+               if match:
                 idx = match[2]
+                score = match[1] # To jest procentowa pewność dopasowania
                 target = bookie[idx]
+                
+                # TA LINIA JEST KLUCZOWA - DODAJ JĄ:
+                log.info(f"Matcher: {p_str} <-> {bk_strings[idx]} | Score: {score}")
+                
                 ev, _ = calc_ev_pl(p.poly_prob, target.decimal_odds, target.bookmaker)
                 
                 if ev >= MIN_EV_PERCENT:
