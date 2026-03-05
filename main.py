@@ -1,6 +1,7 @@
 import os
 import uuid
 import logging
+import json
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
@@ -26,27 +27,17 @@ ODDS_API_BASE: str = "https://api.odds-api.io/v3"
 BOOKMAKERS: list[str] = ["Superbet", "Betclic PL"]
 
 ACTIVE_LEAGUES = [
-    # PIŁKA NOŻNA - PEWNIAKI
     ("football", "england-premier-league"),
     ("football", "germany-bundesliga"),
     ("football", "spain-laliga"),
     ("football", "italy-serie-a"),
     ("football", "france-ligue-1"),
     ("football", "poland-ekstraklasa"),
-    ("football", "netherlands-eredivisie"),
-    
-    # KOSZYKÓWKA
     ("basketball", "usa-nba"),
     ("basketball", "international-euroleague"),
-    ("basketball", "spain-liga-acb"),
-    ("basketball", "poland-plk"),
-
-    # TENIS (Aktualnie trwające turnieje z Twojego API)
-    ("tennis", "atp-atp-indian-wells-usa-men-singles"),
-    ("tennis", "wta-wta-indian-wells-usa-women-singles"),
 ]
 
-MIN_EV_PERCENT: float = -5.0  # Zostawiamy na minusie, żeby sprawdzić czy cokolwiek znajdzie
+MIN_EV_PERCENT: float = -5.0  # Na razie zostawiamy ujemne EV do testów
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # MODELS
@@ -82,8 +73,7 @@ class BookieOdds(BaseModel):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 signals: list[EVSignal] = []
-shadow_bets: list[EVSignal] = []
-last_refresh: str = "Never"
+last_refresh: str = "Nigdy"
 
 def calc_ev_pl(prob: float, odds: float, bookmaker: str) -> tuple[float, float]:
     tax = 0.88 if bookmaker.lower() in ["superbet", "betclic pl", "sts", "fortuna"] else 1.0
@@ -101,15 +91,14 @@ def get_kelly(prob: float, odds: float, bookmaker: str) -> float:
 async def fetch_polymarket() -> list[PolyMarket]:
     results = []
     
-    # 1. PEŁNA AUTOMATYZACJA: Wyciąga tagi na podstawie tego, co masz wpisane w ACTIVE_LEAGUES
+    # 1. Automatyczne generowanie tagów na podstawie ACTIVE_LEAGUES
     slugs_to_check = set()
     for _, odds_league in ACTIVE_LEAGUES:
         parts = odds_league.split('-')
-        slugs_to_check.add(parts[-1]) # Np. wyciągnie 'nba' z 'usa-nba'
+        slugs_to_check.add(parts[-1]) 
         if len(parts) > 1:
-            slugs_to_check.add(f"{parts[-2]}-{parts[-1]}") # Np. 'premier-league' z 'england-premier-league'
+            slugs_to_check.add(f"{parts[-2]}-{parts[-1]}")
             
-    # Na wszelki wypadek dorzucamy szerokie tagi, bo Poly czasem tak grupuje mecze
     slugs_to_check.update(["soccer", "basketball", "tennis", "nhl", "mma"])
 
     async with httpx.AsyncClient(timeout=20.0) as client:
@@ -120,21 +109,18 @@ async def fetch_polymarket() -> list[PolyMarket]:
                 
                 if resp.status_code == 200:
                     data = resp.json()
-                    
                     for m in data:
                         q = m.get('question', '').lower()
                         
-                        # 2. FILTR ODRZUCAJĄCY ŚMIECI: 
-                        # Szukamy tylko pojedynczych zdarzeń (meczów/walk), niezależnie czy są dziś, czy za miesiąc.
-                        # Odrzuci to wszystkie "Who will win the Cup", "Will Jesus return" itp.
-                        if " vs " in q or " match " in q or " game " in q or " beat " in q:
-                            
+                        # 2. FILTR: Wykluczamy długoterminówki! Szukamy tylko meczów.
+                        banned_words = ["cup", "championship", "qualify", "series", "draft", "award", "season", "winner", "returns", "convicted", "before"]
+                        
+                        if not any(bw in q for bw in banned_words):
                             if m.get('outcomes') and m.get('outcomePrices'):
                                 outcomes = json.loads(m['outcomes'])
                                 prices = json.loads(m['outcomePrices'])
                                 
                                 for i, label in enumerate(outcomes):
-                                    # Pobieramy tylko kursy, które nie są pewniakami (100%) ani zerami (0%)
                                     prob = float(prices[i])
                                     if 0.02 < prob < 0.98:
                                         results.append(PolyMarket(
@@ -142,8 +128,7 @@ async def fetch_polymarket() -> list[PolyMarket]:
                                             outcome_label=label,
                                             poly_prob=prob
                                         ))
-            except Exception as e:
-                log.error(f"Poly fetch error for slug {slug}: {e}")
+            except Exception:
                 continue
                 
     log.info(f"Poly: Znaleziono {len(results)} rynków pojedynczych meczów (bez długoterminówek).")
@@ -156,6 +141,11 @@ async def fetch_odds_api() -> list[BookieOdds]:
             try:
                 url = f"{ODDS_API_BASE}/events?apiKey={ODDS_API_KEY}&sport={sport}&league={league}"
                 r = await client.get(url)
+                
+                if r.status_code == 429:
+                    log.error("LIMIT ODDS-API PRZEKROCZONY! Musisz wygenerować nowy darmowy klucz na nowy email.")
+                    return []
+                    
                 if r.status_code == 200:
                     events = r.json()
                     for ev in events[:10]:
@@ -173,61 +163,61 @@ async def fetch_odds_api() -> list[BookieOdds]:
                                         decimal_odds=float(out['price']),
                                         bookmaker=b_name
                                     ))
-            except: continue
+            except Exception:
+                continue
     return all_odds
-
-import json
 
 async def run_pipeline():
     global signals, last_refresh
     log.info("--- Pipeline Start ---")
+    
     poly = await fetch_polymarket()
-    # --- TEN FRAGMENT POKAŻE CI CZY FILTR DZIAŁA ---
+    bookie = await fetch_odds_api()
+    
+    # DOWÓD W LOGACH: Wypisanie do 5 meczów z Polymarket
     if poly:
-        log.info(f"--- DOWÓD: Próbka 5 pobranych meczów z Poly ---")
-        # Wyświetlamy 5 unikalnych tytułów, żebyś zobaczył co złapał
+        log.info("--- DOWÓD: Próbka 5 pobranych meczów z Poly ---")
         unique_titles = list(set([p.event_title for p in poly]))
         for title in unique_titles[:5]:
             log.info(f"Złapałem: {title}")
-    # -----------------------------------------------
-    bookie = await fetch_odds_api()
-    
+            
+    if not bookie:
+        log.warning("Pipeline End: Brak danych bukmacherskich (prawdopodobnie limit). Zmien klucz Odds API.")
+        return
+
     new_signals = []
-    if poly and bookie:
-        bk_strings = [f"{b.event_name} {b.selection}".lower() for b in bookie]
-        log.info(f"Matcher: Rozpoczynam porównywanie {len(poly)} rynków Poly z {len(bookie)} kursami bukmacherów.")
+    bk_strings = [f"{b.event_name} {b.selection}".lower() for b in bookie]
+    
+    for p in poly:
+        # Bardziej agresywne czyszczenie pytań z Polymarket do dopasowania
+        clean_q = p.event_title.lower()
+        for word in ["will", "win", "against", "?", "the", "match", "game", "beat"]:
+            clean_q = clean_q.replace(word, "")
         
-        for p in poly:
-            # Bardziej agresywne czyszczenie nazw z Polymarket
-            clean_q = p.event_title.lower()
-            for word in ["will", "win", "against", "?", "the", "match", "winner", "by"]:
-                clean_q = clean_q.replace(word, "")
+        p_str = f"{clean_q.strip()} {p.outcome_label.lower()}".strip()
+        
+        # Matcher (szukamy dopasowania)
+        match = process.extractOne(p_str, bk_strings, scorer=fuzz.token_set_ratio, score_cutoff=40)
+        
+        if match:
+            idx = match[2]
+            score = match[1]
+            target = bookie[idx]
             
-            p_str = f"{clean_q.strip()} {p.outcome_label.lower()}".strip()
+            # Wypisze w logach kiedy uda się połączyć mecze
+            log.info(f"MATCH! Poly: '{p_str}' <-> Bookie: '{bk_strings[idx]}' | Score: {score}")
             
-            # Matcher z niskim progiem i logowaniem
-            match = process.extractOne(p_str, bk_strings, scorer=fuzz.token_set_ratio, score_cutoff=35)
+            ev, _ = calc_ev_pl(p.poly_prob, target.decimal_odds, target.bookmaker)
             
-            if match:
-                idx = match[2]
-                score = match[1]
-                target = bookie[idx]
-                
-                # TO POZWOLI CI ZOBACZYĆ CZY SYSTEM DZIAŁA:
-                if score > 35:
-                    log.info(f"MATCH! Poly: '{p_str}' <-> Bookie: '{bk_strings[idx]}' | Score: {score}")
-                
-                ev, _ = calc_ev_pl(p.poly_prob, target.decimal_odds, target.bookmaker)
-                
-                if ev >= MIN_EV_PERCENT:
-                    sig = EVSignal(
-                        poly_event=p.event_title, poly_outcome=p.outcome_label,
-                        poly_prob=p.poly_prob, bookmaker=target.bookmaker,
-                        bookie_event=target.event_name, bookie_selection=target.selection,
-                        bookie_odds=target.decimal_odds, ev_pct=ev,
-                        kelly_stake=get_kelly(p.poly_prob, target.decimal_odds, target.bookmaker)
-                    )
-                    new_signals.append(sig)
+            if ev >= MIN_EV_PERCENT:
+                sig = EVSignal(
+                    poly_event=p.event_title, poly_outcome=p.outcome_label,
+                    poly_prob=p.poly_prob, bookmaker=target.bookmaker,
+                    bookie_event=target.event_name, bookie_selection=target.selection,
+                    bookie_odds=target.decimal_odds, ev_pct=ev,
+                    kelly_stake=get_kelly(p.poly_prob, target.decimal_odds, target.bookmaker)
+                )
+                new_signals.append(sig)
 
     signals = sorted(new_signals, key=lambda x: x.ev_pct, reverse=True)
     last_refresh = datetime.now().strftime("%H:%M:%S")
@@ -259,3 +249,9 @@ async def index(request: Request):
 @app.get("/api/signals")
 async def api_signals():
     return {"count": len(signals), "signals": [s.model_dump() for s in signals]}
+
+# NAPRAWIONY PRZYCISK: ten endpoint pozwala przyciskowi odświeżać skaner na życzenie
+@app.post("/api/refresh")
+async def force_refresh():
+    await run_pipeline()
+    return {"status": "ok"}
