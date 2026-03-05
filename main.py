@@ -218,19 +218,15 @@ async def run_pipeline():
     poly = await fetch_polymarket()
     bookie = await fetch_odds_api()
     
-new_signals = []
-    if poly and bookie:
-        # Przygotowujemy listę nazw od bukmacherów
+    new_signals = []
+    if poly and bookie:  # <--- Sprawdź tę linię. Musi być równo z new_signals
         bk_strings = [f"{b.event_name} {b.selection}".lower() for b in bookie]
-        
         for p in poly:
-            # Polymarket często ma pytania typu "Will Team X win?". 
-            # Czyścimy to, żeby zostały same kluczowe nazwy.
             p_str = p.event_title.lower().replace("will", "").replace("win", "").replace("against", "")
             p_str = f"{p_str} {p.outcome_label}".lower()
             
-            # Obniżamy score_cutoff do 35 - to klucz do sukcesu
             match = process.extractOne(p_str, bk_strings, scorer=fuzz.token_set_ratio, score_cutoff=35)
+            # ... reszta kodu musi być odpowiednio przesunięta w prawo ...
             
             if match:
                 idx = match[2]
