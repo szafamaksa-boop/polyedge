@@ -159,9 +159,10 @@ async def fetch_polymarket() -> list[PolyOutcome]:
 async def fetch_odds_api() -> list[BookieOutcome]:
     if not ODDS_API_KEY: return []
     all_outcomes = []
-    async with httpx.AsyncClient(timeout=20.0) as client:
+    async with httpx.AsyncClient(timeout=25.0) as client:
         for sport, league in ACTIVE_LEAGUES:
             try:
+                # 1. Pobierz listę meczów
                 ev_r = await client.get(f"{ODDS_API_BASE}/events", params={
                     "apiKey": ODDS_API_KEY, "sport": sport, "league": league
                 })
@@ -170,43 +171,44 @@ async def fetch_odds_api() -> list[BookieOutcome]:
                 events = ev_r.json()
                 if not isinstance(events, list): continue
 
-                for ev in events[:10]:
+                for ev in events[:10]: # Bierzemy 10 najświeższych meczów
                     eid = ev.get("id")
                     if not eid: continue
 
+                    # 2. Pobierz kursy
                     o_r = await client.get(f"{ODDS_API_BASE}/odds", params={
                         "apiKey": ODDS_API_KEY, "eventId": eid, "bookmakers": ",".join(BOOKMAKERS)
                     })
                     if o_r.status_code != 200: continue
                     
-                    data = o_r.json()
-                    # Zabezpieczenie: jeśli API zwróci string zamiast słownika
-                    if isinstance(data, str):
-                        try: data = json.loads(data)
-                        except: continue
+                    # Krytyczna poprawka formatu danych
+                    try:
+                        raw_text = o_r.text
+                        data = json.loads(raw_text) if isinstance(raw_text, str) else o_r.json()
+                    except: continue
                     
-                    # Pobieranie listy bukmacherów z różnych możliwych struktur API
-                    bk_list = data.get("bookmakers", []) if isinstance(data, dict) else []
-                    
+                    # Wyciąganie bukmacherów (Superbet, Betclic PL)
+                    bk_list = data.get("bookmakers", []) if isinstance(data, dict) else data
+                    if not isinstance(bk_list, list): continue
+
                     for bk in bk_list:
                         bk_name = bk.get("name", "Unknown")
                         for mkt in bk.get("markets", []):
-                            # Interesuje nas główny rynek (zwycięzca meczu)
-                            for oc in mkt.get("outcomes", []):
+                            # Pobieramy wyniki (zwycięzca meczu)
+                            outcomes = mkt.get("outcomes", mkt.get("selections", []))
+                            for oc in outcomes:
                                 try:
-                                    price = float(oc.get("price", 0))
-                                    if price < 1.01: continue
-                                    
                                     all_outcomes.append(BookieOutcome(
                                         sport=sport, event_id=str(eid),
                                         event_name=f"{ev.get('home')} vs {ev.get('away')}",
                                         selection=oc.get("name"),
-                                        decimal_odds=price,
+                                        decimal_odds=float(oc.get("price", 0)),
                                         bookmaker=bk_name
                                     ))
                                 except: continue
             except Exception as e:
-                log.warning(f"Error fetching {league}: {str(e)}")
+                log.warning(f"Błąd {league}: {str(e)}")
+    log.info(f"Pipeline: Pobrano {len(all_outcomes)} kursów.")
     return all_outcomes
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
