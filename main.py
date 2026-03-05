@@ -92,14 +92,16 @@ def get_kelly(prob: float, odds: float, bookmaker: str) -> float:
 async def fetch_polymarket() -> list[PolyMarket]:
     results = []
     
-    # 1. Dokładne tagi prosto z Twoich linków
     tags = [
         "nba", "epl", "atp", "bundesliga", "laliga", 
-        "serie-a", "ligue-1", "champions-league", "soccer", "basketball", "tennis"
+        "serie-a", "ligue-1", "champions-league", "soccer", "basketball", "tennis", "nhl"
     ]
     
-    # 2. WZÓR: Szukamy struktury YYYY-MM-DD w linku (np. 2026-03-05)
-    date_pattern = re.compile(r"\d{4}-\d{2}-\d{2}")
+    # TWÓJ GENIALNY PATTERN: 
+    # ^.*- oznacza "cokolwiek z myślnikami" (np. nba-bkn-mia)
+    # \d{4}-\d{2}-\d{2}$ oznacza "MUSI się kończyć na datę YYYY-MM-DD"
+    # To natychmiast odrzuci "2026-nba-champion", bo tam data jest na początku i nie ma dni/miesięcy!
+    match_pattern = re.compile(r"^.*-\d{4}-\d{2}-\d{2}$")
 
     async with httpx.AsyncClient(timeout=20.0) as client:
         for tag in tags:
@@ -110,35 +112,44 @@ async def fetch_polymarket() -> list[PolyMarket]:
                 if resp.status_code == 200:
                     data = resp.json()
                     for m in data:
-                        slug = m.get('slug', '').lower()
-                        q = m.get('question', '')
-                        group_title = m.get('groupItemTitle', '')
                         
-                        # 3. ZŁOTY FILTR: Jeśli link meczu ma w sobie datę, to bierzemy!
-                        if date_pattern.search(slug):
+                        # Pobieramy linki ukryte w API
+                        event_slug = ""
+                        if m.get("events") and len(m["events"]) > 0:
+                            event_slug = m["events"][0].get("slug", "").lower()
+                            
+                        market_slug = m.get("slug", "").lower()
+                        
+                        # TWARDY FILTR: Jeśli slug nie kończy się na datę, wyrzucamy go do kosza!
+                        if match_pattern.match(event_slug) or match_pattern.match(market_slug):
+                            
                             if m.get('outcomes') and m.get('outcomePrices'):
                                 outcomes = json.loads(m['outcomes'])
                                 prices = json.loads(m['outcomePrices'])
                                 
+                                q = m.get('question', '')
+                                group = m.get('groupItemTitle', '')
+                                
+                                # Łączymy "NBA Games: March 5" z "Brooklyn Nets" 
+                                full_name = f"{group} {q}".strip() if group else q
+                                
                                 for i, label in enumerate(outcomes):
                                     prob = float(prices[i])
                                     if 0.02 < prob < 0.98:
-                                        # Łączymy nazwy, żeby Matcher widział oba zespoły (np. "Brooklyn Nets vs Miami Heat")
-                                        full_name = f"{group_title} {q}".strip() if group_title else q
-                                        
                                         results.append(PolyMarket(
                                             event_title=full_name,
                                             outcome_label=label,
                                             poly_prob=prob
                                         ))
-            except Exception:
+            except Exception as e:
+                log.error(f"Błąd przy pobieraniu Poly tag={tag}: {e}")
                 continue
                 
     # Usuwamy duplikaty
     unique_results = {f"{r.event_title}-{r.outcome_label}": r for r in results}
     final_list = list(unique_results.values())
             
-    log.info(f"Poly: PATTERN MATCH! Znaleziono {len(final_list)} rynków (tylko mecze dzienne).")
+    log.info(f"Poly: PATTERN MATCH OPARTY NA LINKACH! Znaleziono {len(final_list)} rynków.")
     return final_list
   
 async def fetch_odds_api() -> list[BookieOdds]:
