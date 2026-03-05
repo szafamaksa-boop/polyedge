@@ -95,7 +95,8 @@ async def fetch_polymarket() -> list[PolyMarket]:
     slugs_to_check = set()
     for _, odds_league in ACTIVE_LEAGUES:
         parts = odds_league.split('-')
-        slugs_to_check.add(parts[-1]) 
+        if parts[-1].isalpha() and len(parts[-1]) > 2: # Zabezpieczenie przed pobraniem tagu 'a' lub '1'
+            slugs_to_check.add(parts[-1]) 
         if len(parts) > 1:
             slugs_to_check.add(f"{parts[-2]}-{parts[-1]}")
             
@@ -112,10 +113,9 @@ async def fetch_polymarket() -> list[PolyMarket]:
                     for m in data:
                         q = m.get('question', '').lower()
                         
-                        # 2. FILTR: Wykluczamy długoterminówki! Szukamy tylko meczów.
-                        banned_words = ["cup", "championship", "qualify", "series", "draft", "award", "season", "winner", "returns", "convicted", "before"]
-                        
-                        if not any(bw in q for bw in banned_words):
+                        # 2. TWARDY FILTR: Bierzemy TYLKO pojedyncze mecze.
+                        # Sprawdzamy czy pytanie zawiera typowe dla Polymarketu struktury pojedynków.
+                        if " vs " in q or " beat " in q:
                             if m.get('outcomes') and m.get('outcomePrices'):
                                 outcomes = json.loads(m['outcomes'])
                                 prices = json.loads(m['outcomePrices'])
@@ -131,9 +131,9 @@ async def fetch_polymarket() -> list[PolyMarket]:
             except Exception:
                 continue
                 
-    log.info(f"Poly: Znaleziono {len(results)} rynków pojedynczych meczów (bez długoterminówek).")
+    log.info(f"Poly: Znaleziono {len(results)} rynków pojedynczych meczów (tylko twarde 'vs').")
     return results
-
+  
 async def fetch_odds_api() -> list[BookieOdds]:
     all_odds = []
     async with httpx.AsyncClient(timeout=20.0) as client:
