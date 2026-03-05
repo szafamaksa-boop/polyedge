@@ -100,26 +100,53 @@ def get_kelly(prob: float, odds: float, bookmaker: str) -> float:
 
 async def fetch_polymarket() -> list[PolyMarket]:
     results = []
-    tags = ["sports", "soccer", "nba", "tennis"]
+    
+    # 1. PEŁNA AUTOMATYZACJA: Wyciąga tagi na podstawie tego, co masz wpisane w ACTIVE_LEAGUES
+    slugs_to_check = set()
+    for _, odds_league in ACTIVE_LEAGUES:
+        parts = odds_league.split('-')
+        slugs_to_check.add(parts[-1]) # Np. wyciągnie 'nba' z 'usa-nba'
+        if len(parts) > 1:
+            slugs_to_check.add(f"{parts[-2]}-{parts[-1]}") # Np. 'premier-league' z 'england-premier-league'
+            
+    # Na wszelki wypadek dorzucamy szerokie tagi, bo Poly czasem tak grupuje mecze
+    slugs_to_check.update(["soccer", "basketball", "tennis", "nhl", "mma"])
+
     async with httpx.AsyncClient(timeout=20.0) as client:
-        for tag in tags:
+        for slug in slugs_to_check:
             try:
-                url = f"https://gamma-api.polymarket.com/markets?tag={tag}&closed=false&limit=50"
+                url = f"https://gamma-api.polymarket.com/markets?tag={slug}&active=true&closed=false&limit=100"
                 resp = await client.get(url)
+                
                 if resp.status_code == 200:
-                    for m in resp.json():
-                        if m.get('outcomes') and m.get('outcomePrices'):
-                            prices = json.loads(m['outcomePrices'])
-                            outcomes = json.loads(m['outcomes'])
-                            for i, label in enumerate(outcomes):
-                                prob = float(prices[i])
-                                if 0.05 < prob < 0.95:
-                                    results.append(PolyMarket(
-                                        event_title=m['question'],
-                                        outcome_label=label,
-                                        poly_prob=prob
-                                    ))
-            except: continue
+                    data = resp.json()
+                    
+                    for m in data:
+                        q = m.get('question', '').lower()
+                        
+                        # 2. FILTR ODRZUCAJĄCY ŚMIECI: 
+                        # Szukamy tylko pojedynczych zdarzeń (meczów/walk), niezależnie czy są dziś, czy za miesiąc.
+                        # Odrzuci to wszystkie "Who will win the Cup", "Will Jesus return" itp.
+                        if " vs " in q or " match " in q or " game " in q or " beat " in q:
+                            
+                            if m.get('outcomes') and m.get('outcomePrices'):
+                                outcomes = json.loads(m['outcomes'])
+                                prices = json.loads(m['outcomePrices'])
+                                
+                                for i, label in enumerate(outcomes):
+                                    # Pobieramy tylko kursy, które nie są pewniakami (100%) ani zerami (0%)
+                                    prob = float(prices[i])
+                                    if 0.02 < prob < 0.98:
+                                        results.append(PolyMarket(
+                                            event_title=m['question'],
+                                            outcome_label=label,
+                                            poly_prob=prob
+                                        ))
+            except Exception as e:
+                log.error(f"Poly fetch error for slug {slug}: {e}")
+                continue
+                
+    log.info(f"Poly: Znaleziono {len(results)} rynków pojedynczych meczów (bez długoterminówek).")
     return results
 
 async def fetch_odds_api() -> list[BookieOdds]:
