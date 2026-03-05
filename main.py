@@ -154,35 +154,51 @@ async def fetch_odds_api() -> list[BookieOutcome]:
     async with httpx.AsyncClient(timeout=20.0) as client:
         for sport, league in ACTIVE_LEAGUES:
             try:
-                # 1. Pobierz eventy dla ligi
                 ev_r = await client.get(f"{ODDS_API_BASE}/events", params={
                     "apiKey": ODDS_API_KEY, "sport": sport, "league": league
                 })
                 if ev_r.status_code != 200: continue
                 
                 events = ev_r.json()
-                for ev in events[:15]: # Limit do 15 eventów na ligę żeby oszczędzać API
+                if not isinstance(events, list): continue
+
+                for ev in events[:10]:
                     eid = ev.get("id")
-                    # 2. Pobierz kursy dla eventu
+                    if not eid: continue
+
                     o_r = await client.get(f"{ODDS_API_BASE}/odds", params={
                         "apiKey": ODDS_API_KEY, "eventId": eid, "bookmakers": ",".join(BOOKMAKERS)
                     })
                     if o_r.status_code != 200: continue
                     
                     data = o_r.json()
-                    for bk in data.get("bookmakers", []):
-                        bk_name = bk.get("name")
+                    # Zabezpieczenie: jeśli API zwróci string zamiast słownika
+                    if isinstance(data, str):
+                        try: data = json.loads(data)
+                        except: continue
+                    
+                    # Pobieranie listy bukmacherów z różnych możliwych struktur API
+                    bk_list = data.get("bookmakers", []) if isinstance(data, dict) else []
+                    
+                    for bk in bk_list:
+                        bk_name = bk.get("name", "Unknown")
                         for mkt in bk.get("markets", []):
+                            # Interesuje nas główny rynek (zwycięzca meczu)
                             for oc in mkt.get("outcomes", []):
-                                all_outcomes.append(BookieOutcome(
-                                    sport=sport, event_id=str(eid),
-                                    event_name=f"{ev.get('home')} vs {ev.get('away')}",
-                                    selection=oc.get("name"),
-                                    decimal_odds=float(oc.get("price")),
-                                    bookmaker=bk_name
-                                ))
+                                try:
+                                    price = float(oc.get("price", 0))
+                                    if price < 1.01: continue
+                                    
+                                    all_outcomes.append(BookieOutcome(
+                                        sport=sport, event_id=str(eid),
+                                        event_name=f"{ev.get('home')} vs {ev.get('away')}",
+                                        selection=oc.get("name"),
+                                        decimal_odds=price,
+                                        bookmaker=bk_name
+                                    ))
+                                except: continue
             except Exception as e:
-                log.warning(f"Error fetching {league}: {e}")
+                log.warning(f"Error fetching {league}: {str(e)}")
     return all_outcomes
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
