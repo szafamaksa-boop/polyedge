@@ -27,12 +27,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 ODDS_API_KEY: str = os.environ.get("ODDS_API_KEY", "")
 ODDS_API_BASE: str = "https://api.odds-api.io/v3"
 
-# Wybrani bukmacherzy (Darmowy plan: max 2)
 BOOKMAKERS: list[str] = ["Superbet", "Betclic PL"]
 
-# Formaty dla odds-api.io: (sport, league)
 ACTIVE_LEAGUES = [
-    # PIŁKA NOŻNA
     ("football", "england-premier-league"),
     ("football", "germany-bundesliga"),
     ("football", "spain-laliga"),
@@ -40,15 +37,12 @@ ACTIVE_LEAGUES = [
     ("football", "france-ligue-1"),
     ("football", "poland-ekstraklasa"),
     ("football", "international-clubs-uefa-champions-league"),
-    # TENIS
     ("tennis", "atp-atp-indian-wells-usa-men-singles"),
     ("tennis", "wta-wta-indian-wells-usa-women-singles"),
-    # KOSZYKÓWKA
     ("basketball", "usa-nba"),
     ("basketball", "poland-plk"),
     ("basketball", "international-euroleague"),
     ("basketball", "spain-liga-acb"),
-]
 ]
 
 POLYMARKET_GAMMA_URL: str = "https://gamma-api.polymarket.com/markets"
