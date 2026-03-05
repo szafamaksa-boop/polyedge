@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import logging
 import json
@@ -91,31 +92,30 @@ def get_kelly(prob: float, odds: float, bookmaker: str) -> float:
 async def fetch_polymarket() -> list[PolyMarket]:
     results = []
     
-    # 1. Automatyczne generowanie tagów na podstawie ACTIVE_LEAGUES
-    slugs_to_check = set()
-    for _, odds_league in ACTIVE_LEAGUES:
-        parts = odds_league.split('-')
-        if parts[-1].isalpha() and len(parts[-1]) > 2: # Zabezpieczenie przed pobraniem tagu 'a' lub '1'
-            slugs_to_check.add(parts[-1]) 
-        if len(parts) > 1:
-            slugs_to_check.add(f"{parts[-2]}-{parts[-1]}")
-            
-    slugs_to_check.update(["soccer", "basketball", "tennis", "nhl", "mma"])
+    # 1. Dokładne tagi prosto z Twoich linków
+    tags = [
+        "nba", "epl", "atp", "bundesliga", "laliga", 
+        "serie-a", "ligue-1", "champions-league", "soccer", "basketball", "tennis"
+    ]
+    
+    # 2. WZÓR: Szukamy struktury YYYY-MM-DD w linku (np. 2026-03-05)
+    date_pattern = re.compile(r"\d{4}-\d{2}-\d{2}")
 
     async with httpx.AsyncClient(timeout=20.0) as client:
-        for slug in slugs_to_check:
+        for tag in tags:
             try:
-                url = f"https://gamma-api.polymarket.com/markets?tag={slug}&active=true&closed=false&limit=100"
+                url = f"https://gamma-api.polymarket.com/markets?tag={tag}&active=true&closed=false&limit=100"
                 resp = await client.get(url)
                 
                 if resp.status_code == 200:
                     data = resp.json()
                     for m in data:
-                        q = m.get('question', '').lower()
+                        slug = m.get('slug', '').lower()
+                        q = m.get('question', '')
+                        group_title = m.get('groupItemTitle', '')
                         
-                        # 2. TWARDY FILTR: Bierzemy TYLKO pojedyncze mecze.
-                        # Sprawdzamy czy pytanie zawiera typowe dla Polymarketu struktury pojedynków.
-                        if " vs " in q or " beat " in q:
+                        # 3. ZŁOTY FILTR: Jeśli link meczu ma w sobie datę, to bierzemy!
+                        if date_pattern.search(slug):
                             if m.get('outcomes') and m.get('outcomePrices'):
                                 outcomes = json.loads(m['outcomes'])
                                 prices = json.loads(m['outcomePrices'])
@@ -123,16 +123,23 @@ async def fetch_polymarket() -> list[PolyMarket]:
                                 for i, label in enumerate(outcomes):
                                     prob = float(prices[i])
                                     if 0.02 < prob < 0.98:
+                                        # Łączymy nazwy, żeby Matcher widział oba zespoły (np. "Brooklyn Nets vs Miami Heat")
+                                        full_name = f"{group_title} {q}".strip() if group_title else q
+                                        
                                         results.append(PolyMarket(
-                                            event_title=m['question'],
+                                            event_title=full_name,
                                             outcome_label=label,
                                             poly_prob=prob
                                         ))
             except Exception:
                 continue
                 
-    log.info(f"Poly: Znaleziono {len(results)} rynków pojedynczych meczów (tylko twarde 'vs').")
-    return results
+    # Usuwamy duplikaty
+    unique_results = {f"{r.event_title}-{r.outcome_label}": r for r in results}
+    final_list = list(unique_results.values())
+            
+    log.info(f"Poly: PATTERN MATCH! Znaleziono {len(final_list)} rynków (tylko mecze dzienne).")
+    return final_list
   
 async def fetch_odds_api() -> list[BookieOdds]:
     all_odds = []
