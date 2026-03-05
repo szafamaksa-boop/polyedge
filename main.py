@@ -32,15 +32,23 @@ BOOKMAKERS: list[str] = ["Superbet", "Betclic PL"]
 
 # Formaty dla odds-api.io: (sport, league)
 ACTIVE_LEAGUES = [
+    # PIŁKA NOŻNA
     ("football", "england-premier-league"),
     ("football", "germany-bundesliga"),
-    ("football", "spain-la-liga"),
+    ("football", "spain-laliga"),
     ("football", "italy-serie-a"),
     ("football", "france-ligue-1"),
-    ("football", "uefa-champions-league"),
-    ("basketball", "nba"),
-    ("basketball", "euroleague"),
-    ("mma", "ufc"),
+    ("football", "poland-ekstraklasa"),
+    ("football", "international-clubs-uefa-champions-league"),
+    # TENIS
+    ("tennis", "atp-atp-indian-wells-usa-men-singles"),
+    ("tennis", "wta-wta-indian-wells-usa-women-singles"),
+    # KOSZYKÓWKA
+    ("basketball", "usa-nba"),
+    ("basketball", "poland-plk"),
+    ("basketball", "international-euroleague"),
+    ("basketball", "spain-liga-acb"),
+]
 ]
 
 POLYMARKET_GAMMA_URL: str = "https://gamma-api.polymarket.com/markets"
