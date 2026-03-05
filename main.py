@@ -218,15 +218,28 @@ async def run_pipeline():
     poly = await fetch_polymarket()
     bookie = await fetch_odds_api()
     
-    new_signals = []
+new_signals = []
     if poly and bookie:
+        # Przygotowujemy listę nazw od bukmacherów
         bk_strings = [f"{b.event_name} {b.selection}".lower() for b in bookie]
+        
         for p in poly:
-            p_str = f"{p.event_title} {p.outcome_label}".lower()
-            match = process.extractOne(p_str, bk_strings, scorer=fuzz.token_set_ratio, score_cutoff=65)
+            # Polymarket często ma pytania typu "Will Team X win?". 
+            # Czyścimy to, żeby zostały same kluczowe nazwy.
+            p_str = p.event_title.lower().replace("will", "").replace("win", "").replace("against", "")
+            p_str = f"{p_str} {p.outcome_label}".lower()
+            
+            # Obniżamy score_cutoff do 35 - to klucz do sukcesu
+            match = process.extractOne(p_str, bk_strings, scorer=fuzz.token_set_ratio, score_cutoff=35)
+            
             if match:
                 idx = match[2]
+                score = match[1]
                 target = bookie[idx]
+                
+                # Opcjonalnie: loguj dopasowania w konsoli Railway, żebyś widział co się łączy
+                # log.info(f"Match found: {p_str} <-> {bk_strings[idx]} (Score: {score})")
+                
                 ev, _ = calc_ev_pl(p.poly_prob, target.decimal_odds, target.bookmaker)
                 
                 if ev >= MIN_EV_PERCENT:
