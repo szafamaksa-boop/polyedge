@@ -182,6 +182,14 @@ async def run_pipeline():
     global signals, last_refresh
     log.info("--- Pipeline Start ---")
     poly = await fetch_polymarket()
+    # --- TEN FRAGMENT POKAŻE CI CZY FILTR DZIAŁA ---
+    if poly:
+        log.info(f"--- DOWÓD: Próbka 5 pobranych meczów z Poly ---")
+        # Wyświetlamy 5 unikalnych tytułów, żebyś zobaczył co złapał
+        unique_titles = list(set([p.event_title for p in poly]))
+        for title in unique_titles[:5]:
+            log.info(f"Złapałem: {title}")
+    # -----------------------------------------------
     bookie = await fetch_odds_api()
     
     new_signals = []
