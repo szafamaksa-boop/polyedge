@@ -160,23 +160,27 @@ async def run_pipeline():
     new_signals = []
     if poly and bookie:
         bk_strings = [f"{b.event_name} {b.selection}".lower() for b in bookie]
+        log.info(f"Matcher: Rozpoczynam porównywanie {len(poly)} rynków Poly z {len(bookie)} kursami bukmacherów.")
         
         for p in poly:
-            # Czyszczenie pytania Polymarket
-            clean_q = p.event_title.lower().replace("will", "").replace("win", "").replace("against", "").replace("?", "")
-            p_str = f"{clean_q} {p.outcome_label}".lower()
+            # Bardziej agresywne czyszczenie nazw z Polymarket
+            clean_q = p.event_title.lower()
+            for word in ["will", "win", "against", "?", "the", "match", "winner", "by"]:
+                clean_q = clean_q.replace(word, "")
             
-            # Matcher z niskim progiem
+            p_str = f"{clean_q.strip()} {p.outcome_label.lower()}".strip()
+            
+            # Matcher z niskim progiem i logowaniem
             match = process.extractOne(p_str, bk_strings, scorer=fuzz.token_set_ratio, score_cutoff=35)
             
             if match:
-               if match:
                 idx = match[2]
-                score = match[1] # To jest procentowa pewność dopasowania
+                score = match[1]
                 target = bookie[idx]
                 
-                # TA LINIA JEST KLUCZOWA - DODAJ JĄ:
-                log.info(f"Matcher: {p_str} <-> {bk_strings[idx]} | Score: {score}")
+                # TO POZWOLI CI ZOBACZYĆ CZY SYSTEM DZIAŁA:
+                if score > 35:
+                    log.info(f"MATCH! Poly: '{p_str}' <-> Bookie: '{bk_strings[idx]}' | Score: {score}")
                 
                 ev, _ = calc_ev_pl(p.poly_prob, target.decimal_odds, target.bookmaker)
                 
