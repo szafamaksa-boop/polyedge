@@ -1,54 +1,74 @@
 <!DOCTYPE html>
-<html lang="pl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>PolyEdge</title><style>
-*{margin:0;padding:0;box-sizing:border-box}body{background:#0f172a;color:#e2e8f0;font-family:system-ui,sans-serif}
-.w{max-width:1200px;margin:0 auto;padding:20px}.c{background:#1e293b;border:1px solid #334155;border-radius:12px;margin-bottom:20px}
-.ch{padding:14px 20px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center}
-.ch h2{font-size:15px;font-weight:700}.b{font-size:11px;padding:2px 8px;border-radius:9999px;font-weight:600}
-.bg{background:#065f46;color:#6ee7b7}.ba{background:#78350f;color:#fcd34d}.bb{background:#1e3a5f;color:#93c5fd}
-.st{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
-.s{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px}
-.sl{color:#64748b;font-size:12px;margin-bottom:6px}.sv{font-size:26px;font-weight:800}
-table{width:100%;border-collapse:collapse}th{text-align:left;font-size:11px;color:#94a3b8;padding:8px 12px;border-bottom:1px solid #334155;text-transform:uppercase}
-td{padding:9px 12px;font-size:13px;border-bottom:1px solid #1e293b40}tr:hover{background:#1e293b80}
-.m{font-family:monospace}.g{color:#34d399}.a{color:#fbbf24}.r{color:#f87171}.i{color:#818cf8}.p{color:#f472b6}
-.btn{padding:4px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#065f46;color:#6ee7b7}
-.btn:hover{background:#047857}.hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
-.rb{background:#312e81;color:#a5b4fc;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none}
-.rb:hover{background:#3730a3}.pu{animation:pu 2s infinite}@keyframes pu{0%,100%{opacity:1}50%{opacity:.5}}
-.tr{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tx{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}
-.tx>div{border-radius:8px;padding:12px;font-size:12px}
-@media(max-width:768px){.st{grid-template-columns:repeat(2,1fr)}.tx{grid-template-columns:1fr}}
-</style></head><body><div class="w">
-<div class="hd"><div><h1 style="font-size:22px;font-weight:800"><span class="i">&#9670;</span> PolyEdge</h1>
-<p style="color:#64748b;font-size:13px;margin-top:2px">Polymarket &rarr; PL Bookmakers | EV Scanner</p></div>
-<div style="display:flex;align-items:center;gap:10px">
-<span id="st" class="b bg pu">&bull; LIVE</span><span id="up" style="color:#64748b;font-size:12px"></span>
-<button class="rb" onclick="L()">Odswiez</button></div></div>
-<div class="st">
-<div class="s"><div class="sl">Sygnaly EV+</div><div class="sv i" id="n1">&mdash;</div></div>
-<div class="s"><div class="sl">Shadow Bets</div><div class="sv a" id="n2">&mdash;</div></div>
-<div class="s"><div class="sl">Real Bets</div><div class="sv g" id="n3">&mdash;</div></div>
-<div class="s"><div class="sl">Avg EV%</div><div class="sv p" id="n4">&mdash;</div></div></div>
-<div class="c"><div class="ch"><h2>Live EV+ Signals</h2><span class="b bb">EV &gt; 3%</span></div>
-<div style="overflow-x:auto"><table><thead><tr><th>Event</th><th>Outcome</th><th>Buk</th><th>Kurs</th><th>Poly%</th><th>Edge</th><th>EV%</th><th>Stawka</th><th>Strategia</th><th>Net EV</th></tr></thead>
-<tbody id="t1"><tr><td colspan="10" style="text-align:center;color:#64748b;padding:40px">Ladowanie... pipeline co 5 min</td></tr></tbody></table></div></div>
-<div class="c"><div class="ch"><h2>Shadow Bets</h2><span class="b ba" id="sc">0</span></div>
-<div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Event</th><th>Buk</th><th>Kurs</th><th>EV%</th><th>Stawka</th><th>Status</th><th>Akcja</th></tr></thead>
-<tbody id="t2"><tr><td colspan="8" style="text-align:center;color:#64748b;padding:40px">Brak shadow bets</td></tr></tbody></table></div></div>
-<div class="c" style="padding:18px"><h3 style="font-size:13px;font-weight:700;color:#94a3b8;margin-bottom:10px">Podatki PL 2026</h3>
-<div class="tx"><div style="background:#065f46"><b style="color:#6ee7b7">Betclic - 0% tax stawki</b><div style="color:#a7f3d0;margin-top:4px">Buk pokrywa 12%. Podatek 10% tylko ponad 2280 PLN.</div></div>
-<div style="background:#78350f"><b style="color:#fcd34d">STS/Superbet - 12% tax</b><div style="color:#fde68a;margin-top:4px">Efektywna stawka 88%. Podatek 10% ponad 2280 PLN.</div></div></div></div></div>
-<script>
-async function L(){try{const[sig,sh,h]=await Promise.all([fetch('/api/signals').then(r=>r.json()),fetch('/api/shadow-bets').then(r=>r.json()),fetch('/health').then(r=>r.json())]);
-document.getElementById('n1').textContent=sig.length;document.getElementById('n2').textContent=sh.filter(b=>!b.is_real).length;
-document.getElementById('n3').textContent=sh.filter(b=>b.is_real).length;
-document.getElementById('n4').textContent=sig.length?(sig.reduce((a,x)=>a+x.ev_pct,0)/sig.length).toFixed(1)+'%':'--';
-if(h.last_update)document.getElementById('up').textContent='Scan: '+new Date(h.last_update).toLocaleTimeString('pl-PL');
-var t1=document.getElementById('t1');
-if(sig.length===0){t1.innerHTML='<tr><td colspan="10" style="text-align:center;color:#64748b;padding:40px">Brak - skanuje co 5 min</td></tr>';}
-else{var h1='';for(var i=0;i<sig.length;i++){var s=sig[i];h1+='<tr><td class="tr" title="'+s.event+'">'+s.event+'</td><td>'+(s.outcome||'--')+'</td><td><span class="b '+(s.bookmaker==='betclic'?'bg':'ba')+'">'+s.bookmaker_name+'</span></td><td class="m" style="font-weight:600">'+s.bookie_odds+'</td><td class="m">'+s.poly_prob+'%</td><td class="m '+(s.edge_pct>0?'g':'r')+'">'+(s.edge_pct>0?'+':'')+s.edge_pct+'%</td><td class="m g" style="font-weight:700">+'+s.ev_pct+'%</td><td class="m">'+s.suggested_stake+' PLN</td><td><span class="b '+(s.stake_strategy==='CAP_2280'?'ba':'bb')+'">'+s.stake_strategy+'</span></td><td class="m i">'+s.net_ev_pln+' PLN</td></tr>';}t1.innerHTML=h1;}
-var t2=document.getElementById('t2');document.getElementById('sc').textContent=sh.length+' betow';
-if(sh.length===0){t2.innerHTML='<tr><td colspan="8" style="text-align:center;color:#64748b;padding:40px">Brak</td></tr>';}
-else{var h2='';var arr=sh.slice(-20).reverse();for(var j=0;j<arr.length;j++){var b=arr[j];h2+='<tr><td style="font-s
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>PolyEdge v2.1 | Live EV+</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: white; }
+        .card { background: #1e293b; border: 1px solid #334155; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <header class="flex justify-between items-center mb-8 border-b border-slate-700 pb-4">
+            <h1 class="text-3xl font-bold text-blue-400">PolyEdge <span class="text-white text-sm font-normal uppercase tracking-widest ml-2">Signal Engine</span></h1>
+            <div class="text-right">
+                <p class="text-slate-400 text-sm">Status: <span class="text-green-400 font-bold">LIVE</span></p>
+                <button onclick="fetch('/api/refresh', {method:'POST'}).then(()=>location.reload())" class="bg-blue-600 hover:bg-blue-700 px-4 py-1 rounded text-sm mt-2">Odśwież skan</button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="card p-6 rounded-xl">
+                <p class="text-slate-400 text-sm uppercase">Sygnały EV+</p>
+                <h2 class="text-4xl font-black text-white">{{ signals|length }}</h2>
+            </div>
+            <div class="card p-6 rounded-xl border-l-4 border-yellow-500">
+                <p class="text-slate-400 text-sm uppercase">Betclic Edge</p>
+                <h2 class="text-4xl font-black text-yellow-500">0% TAX</h2>
+            </div>
+            <div class="card p-6 rounded-xl">
+                <p class="text-slate-400 text-sm uppercase">Bankroll (PLN)</p>
+                <h2 class="text-4xl font-black text-blue-400">2500.00</h2>
+            </div>
+        </div>
+
+        <div class="card rounded-xl overflow-hidden mb-8">
+            <div class="bg-slate-800 p-4 font-bold border-b border-slate-700">AKTYWNE OKAZJE EV+</div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+                        <tr>
+                            <th class="p-4">Mecz (Bukmacher)</th>
+                            <th class="p-4">Typ</th>
+                            <th class="p-4">Kurs</th>
+                            <th class="p-4 text-center">P(Poly)</th>
+                            <th class="p-4 text-green-400">EV%</th>
+                            <th class="p-4">Kelly Stake</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700">
+                        {% for s in signals %}
+                        <tr class="hover:bg-slate-800 transition">
+                            <td class="p-4">
+                                <div class="font-bold">{{ s.bookie_event }}</div>
+                                <div class="text-xs text-slate-500 uppercase">{{ s.bookmaker }}</div>
+                            </td>
+                            <td class="p-4 text-blue-300 font-medium">{{ s.bookie_selection }}</td>
+                            <td class="p-4 font-mono text-xl">{{ s.bookie_odds }}</td>
+                            <td class="p-4 text-center font-mono">{{ (s.poly_prob * 100)|round(1) }}%</td>
+                            <td class="p-4 text-green-400 font-black text-xl">{{ s.ev_pct }}%</td>
+                            <td class="p-4 font-bold text-yellow-500">{{ s.kelly_stake }} PLN</td>
+                        </tr>
+                        {% endfor %}
+                        {% if not signals %}
+                        <tr><td colspan="6" class="p-12 text-center text-slate-500">Brak sygnałów spełniających kryteria min. 2% EV. Czekam na dane...</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
