@@ -26,12 +26,24 @@ ODDS_API_BASE: str = "https://api.odds-api.io/v3"
 BOOKMAKERS: list[str] = ["Superbet", "Betclic PL"]
 
 ACTIVE_LEAGUES = [
+    # PIŁKA NOŻNA - PEWNIAKI
     ("football", "england-premier-league"),
     ("football", "germany-bundesliga"),
     ("football", "spain-laliga"),
     ("football", "italy-serie-a"),
     ("football", "france-ligue-1"),
+    ("football", "poland-ekstraklasa"),
+    ("football", "netherlands-eredivisie"),
+    
+    # KOSZYKÓWKA
     ("basketball", "usa-nba"),
+    ("basketball", "international-euroleague"),
+    ("basketball", "spain-liga-acb"),
+    ("basketball", "poland-plk"),
+
+    # TENIS (Aktualnie trwające turnieje z Twojego API)
+    ("tennis", "atp-atp-indian-wells-usa-men-singles"),
+    ("tennis", "wta-wta-indian-wells-usa-women-singles"),
 ]
 
 MIN_EV_PERCENT: float = -5.0  # Zostawiamy na minusie, żeby sprawdzić czy cokolwiek znajdzie
@@ -183,7 +195,7 @@ async def run_pipeline():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(run_pipeline, 'interval', minutes=5)
+    scheduler.add_job(run_pipeline, 'interval', minutes=15)
     scheduler.start()
     await run_pipeline()
     yield
